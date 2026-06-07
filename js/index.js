@@ -2,184 +2,170 @@ let wishlist = JSON.parse(localStorage.getItem("wishlist")) || [];
 let cart = JSON.parse(localStorage.getItem("cart")) || [];
 let fetchedProducts = [];
 
-const productsContainer = document.querySelector(".productsContainer");
-const wishListBadge = document.getElementById("wishId");
-const cartBadge = document.getElementById("cartId");
+const grid = document.getElementById("productsGrid");
+const wishId = document.getElementById("wishId");
+const cartId = document.getElementById("cartId");
 
-const api = "https://api.escuelajs.co/api/v1/products?limit=12&offset=10";
+const API = "https://api.escuelajs.co/api/v1/products?limit=12&offset=10";
 
+/* ── BADGES ── */
 function updateBadges() {
-    if (wishListBadge) wishListBadge.textContent = wishlist.reduce((sum, i) => sum + i.quantity, 0);
-    if (cartBadge) cartBadge.textContent = cart.reduce((sum, i) => sum + i.quantity, 0);
+    if (wishId) wishId.textContent = wishlist.length;
+    if (cartId) cartId.textContent = cart.reduce((s, i) => s + i.quantity, 0);
 }
 
-function saveCart() {
-    localStorage.setItem("cart", JSON.stringify(cart));
+/* ── TOAST ── */
+let toastTimer;
+function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
 }
 
-function setWishBtn(btn, added) {
-    if (!btn) return;
-    if (added) {
-        btn.textContent = "✓ Added to Wishlist";
-        btn.style.background = "#16a34a";
-        btn.style.cursor = "not-allowed";
-        btn.style.opacity = "0.9";
-    } else {
-        btn.textContent = "+ Add to Wishlist";
-        btn.style.background = "#2563eb";
-        btn.style.cursor = "pointer";
-        btn.style.opacity = "1";
-    }
+/* ── SAVE ── */
+function saveCart() { localStorage.setItem("cart", JSON.stringify(cart)); }
+function saveWishlist() { localStorage.setItem("wishlist", JSON.stringify(wishlist)); }
+
+/* ── WISH BUTTON render ── */
+function renderWishBtn(id) {
+    const wrap = document.getElementById(`wish-wrap-${id}`);
+    if (!wrap) return;
+    const active = wishlist.some(i => i.id === id);
+    wrap.innerHTML = active
+        ? `<button class="wish-btn active" onclick="removeWish(${id})">
+               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+               Saved to Wishlist
+           </button>`
+        : `<button class="wish-btn" onclick="addWish(${id})">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+               Add to Wishlist
+           </button>`;
 }
 
+/* ── CART CONTROL render ── */
 function renderCartControl(id) {
-    const cartItem = cart.find(item => item.id === id);
-    const wrapper = document.getElementById(`cart-control-${id}`);
-    if (!wrapper) return;
-
-    if (cartItem) {
-        wrapper.innerHTML = `
-            <div class="flex items-center justify-between w-full bg-gray-100 rounded-xl overflow-hidden">
-                <button onclick="decreaseCart(${id})" class="w-10 h-10 bg-red-500 hover:bg-red-600 text-white font-bold text-lg transition cursor-pointer">−</button>
-                <span class="font-bold text-gray-800 text-sm">${cartItem.quantity}</span>
-                <button onclick="increaseCart(${id})" class="w-10 h-10 bg-green-500 hover:bg-green-600 text-white font-bold text-lg transition cursor-pointer">+</button>
-            </div>
-        `;
-    } else {
-        wrapper.innerHTML = `
-            <button
-                id="cart-btn-${id}"
-                onclick="addToCart(${id})"
-                class="w-full py-2.5 text-white font-semibold text-sm rounded-xl transition"
-                style="background:#7c3aed; cursor:pointer;">
-                + Add to Cart
-            </button>
-        `;
-    }
+    const wrap = document.getElementById(`cart-wrap-${id}`);
+    if (!wrap) return;
+    const item = cart.find(i => i.id === id);
+    wrap.innerHTML = item
+        ? `<div class="qty-control">
+               <button class="qty-btn minus" onclick="decreaseCart(${id})">−</button>
+               <span class="qty-count">${item.quantity}</span>
+               <button class="qty-btn plus" onclick="increaseCart(${id})">+</button>
+           </div>`
+        : `<button class="cart-btn" onclick="addToCart(${id})">+ Add to Cart</button>`;
 }
 
-function increaseCart(id) {
-    const item = cart.find(p => p.id === id);
-    if (item) {
-        item.quantity++;
-        saveCart();
-        updateBadges();
-        renderCartControl(id);
-    }
+/* ── WISHLIST ACTIONS ── */
+function addWish(id) {
+    const p = fetchedProducts.find(p => p.id === id);
+    if (!p) return;
+    wishlist.push({ ...p, quantity: 1 });
+    saveWishlist();
+    updateBadges();
+    renderWishBtn(id);
+    showToast(`❤️ "${p.title}" saved to wishlist`);
+}
+function removeWish(id) {
+    const p = fetchedProducts.find(p => p.id === id);
+    wishlist = wishlist.filter(i => i.id !== id);
+    saveWishlist();
+    updateBadges();
+    renderWishBtn(id);
+    if (p) showToast(`🗑 "${p.title}" removed from wishlist`);
 }
 
-function decreaseCart(id) {
-    const index = cart.findIndex(p => p.id === id);
-    if (index !== -1) {
-        cart[index].quantity--;
-        if (cart[index].quantity <= 0) {
-            cart.splice(index, 1);
-        }
-        saveCart();
-        updateBadges();
-        renderCartControl(id);
-    }
-}
-
-async function fetchProducts() {
-    try {
-        const response = await fetch(api);
-        if (!response.ok) throw new Error("Serverda xatolik");
-        fetchedProducts = await response.json();
-        renderProducts(fetchedProducts);
-    } catch (error) {
-        console.error("Xatolik yuz berdi:", error);
-        if (productsContainer) {
-            productsContainer.innerHTML = `<p class="col-span-full text-center text-red-500 py-10 font-bold">Internet yoki API'da xatolik: ${error.message}</p>`;
-        }
-    }
-}
-
-function renderProducts(products) {
-    if (!productsContainer) return;
-    productsContainer.innerHTML = "";
-
-    products.forEach((product) => {
-        let productImg = "https://picsum.photos/600/400";
-        if (product.images && product.images[0]) {
-            let cleanImg = product.images[0].replace(/[\[\]\"]/g, "");
-            if (cleanImg.startsWith("http") && !cleanImg.includes("imgur.com")) {
-                productImg = cleanImg;
-            } else {
-                productImg = `https://picsum.photos/600/400?random=${product.id}`;
-            }
-        }
-
-        const inWishlist = wishlist.some(item => item.id === product.id);
-        const inCart = cart.find(item => item.id === product.id);
-
-        const wishBtnStyle = inWishlist
-            ? "background:#16a34a; cursor:not-allowed; opacity:0.9;"
-            : "background:#2563eb; cursor:pointer; opacity:1;";
-
-        const cartControlHTML = inCart
-            ? `<div class="flex items-center justify-between w-full bg-gray-100 rounded-xl overflow-hidden">
-                <button onclick="decreaseCart(${product.id})" class="w-10 h-10 bg-red-500 hover:bg-red-600 text-white font-bold text-lg transition cursor-pointer">−</button>
-                <span class="font-bold text-gray-800 text-sm">${inCart.quantity}</span>
-                <button onclick="increaseCart(${product.id})" class="w-10 h-10 bg-green-500 hover:bg-green-600 text-white font-bold text-lg transition cursor-pointer">+</button>
-               </div>`
-            : `<button
-                id="cart-btn-${product.id}"
-                onclick="addToCart(${product.id})"
-                class="w-full py-2.5 text-white font-semibold text-sm rounded-xl transition"
-                style="background:#7c3aed; cursor:pointer;">
-                + Add to Cart
-               </button>`;
-
-        const cardElement = document.createElement("div");
-        cardElement.className = "bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between";
-        cardElement.innerHTML = `
-            <div>
-                <div class="w-full bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center mb-4">
-                    <img class="w-full h-[220px] object-cover rounded-xl" src="${productImg}" alt="${product.title}" onerror="this.src='https://picsum.photos/600/400?random=${product.id}'" />
-                </div>
-                <h3 class="text-base font-bold text-gray-800 line-clamp-1">${product.title}</h3>
-                <p class="text-xl font-extrabold text-blue-600 mt-1.5">$${product.price}</p>
-            </div>
-            <div class="mt-4 space-y-2">
-                <button
-                    id="wish-btn-${product.id}"
-                    onclick="addToWishlist(${product.id})"
-                    class="w-full py-2.5 text-white font-semibold text-sm rounded-xl transition"
-                    style="${wishBtnStyle}">
-                    ${inWishlist ? "✓ Added to Wishlist" : "+ Add to Wishlist"}
-                </button>
-                <div id="cart-control-${product.id}">
-                    ${cartControlHTML}
-                </div>
-            </div>
-        `;
-        productsContainer.appendChild(cardElement);
-    });
-}
-
+/* ── CART ACTIONS ── */
 function addToCart(id) {
-    const product = fetchedProducts.find(p => p.id === id);
-    if (!product) return;
-
-    cart.push({ ...product, quantity: 1 });
+    const p = fetchedProducts.find(p => p.id === id);
+    if (!p) return;
+    cart.push({ ...p, quantity: 1 });
+    saveCart();
+    updateBadges();
+    renderCartControl(id);
+    showToast(`🛒 "${p.title}" added to cart`);
+}
+function increaseCart(id) {
+    const item = cart.find(i => i.id === id);
+    if (item) { item.quantity++; saveCart(); updateBadges(); renderCartControl(id); }
+}
+function decreaseCart(id) {
+    const idx = cart.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    cart[idx].quantity--;
+    if (cart[idx].quantity <= 0) cart.splice(idx, 1);
     saveCart();
     updateBadges();
     renderCartControl(id);
 }
 
-function addToWishlist(id) {
-    const product = fetchedProducts.find(p => p.id === id);
-    if (!product) return;
+/* ── RENDER ── */
+function getImg(product) {
+    if (product.images && product.images[0]) {
+        const clean = product.images[0].replace(/[\[\]\"]/g, "");
+        if (clean.startsWith("http") && !clean.includes("imgur.com")) return clean;
+    }
+    return `https://picsum.photos/600/400?random=${product.id}`;
+}
 
-    const exists = wishlist.some(item => item.id === id);
-    if (exists) {
-        alert(`"${product.title}" allaqachon wishlistga qo'shilgan!`);
-    } else {
-        wishlist.push({ ...product, quantity: 1 });
-        localStorage.setItem("wishlist", JSON.stringify(wishlist));
-        updateBadges();
-        setWishBtn(document.getElementById(`wish-btn-${id}`), true);
+function renderProducts(products) {
+    grid.innerHTML = "";
+    products.forEach((p, i) => {
+        const inWish = wishlist.some(w => w.id === p.id);
+        const inCart = cart.find(c => c.id === p.id);
+        const img = getImg(p);
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.style.animationDelay = `${i * 0.05}s`;
+
+        const wishHTML = inWish
+            ? `<button class="wish-btn active" onclick="removeWish(${p.id})">
+                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                   Saved to Wishlist
+               </button>`
+            : `<button class="wish-btn" onclick="addWish(${p.id})">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                   Add to Wishlist
+               </button>`;
+
+        const cartHTML = inCart
+            ? `<div class="qty-control">
+                   <button class="qty-btn minus" onclick="decreaseCart(${p.id})">−</button>
+                   <span class="qty-count">${inCart.quantity}</span>
+                   <button class="qty-btn plus" onclick="increaseCart(${p.id})">+</button>
+               </div>`
+            : `<button class="cart-btn" onclick="addToCart(${p.id})">+ Add to Cart</button>`;
+
+        card.innerHTML = `
+            <div class="card-img-wrap">
+                <img src="${img}" alt="${p.title}" onerror="this.src='https://picsum.photos/600/400?random=${p.id}'"/>
+            </div>
+            <div class="card-body">
+                <div class="card-category">${p.category?.name || "Product"}</div>
+                <div class="card-title">${p.title}</div>
+                <div class="card-price">$${p.price}</div>
+                <div class="card-actions">
+                    <div id="wish-wrap-${p.id}">${wishHTML}</div>
+                    <div id="cart-wrap-${p.id}">${cartHTML}</div>
+                </div>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+/* ── FETCH ── */
+async function fetchProducts() {
+    try {
+        const res = await fetch(API);
+        if (!res.ok) throw new Error("Server error");
+        fetchedProducts = await res.json();
+        renderProducts(fetchedProducts);
+    } catch (e) {
+        grid.innerHTML = `<p style="color:#ff4d4d;grid-column:1/-1;text-align:center;padding:60px">Error: ${e.message}</p>`;
     }
 }
 

@@ -1,91 +1,99 @@
 let wishlist = JSON.parse(localStorage.getItem("wishlist")) || [];
-const wishlistContainer = document.querySelector(".wishlistContainer");
+wishlist = wishlist.map(i => ({ ...i, quantity: i.quantity || 1 }));
 
-wishlist = wishlist.map(item => ({ ...item, quantity: item.quantity || 1 }));
+const grid = document.getElementById("wishGrid");
+const totalBar = document.getElementById("totalBar");
+const wishTotalEl = document.getElementById("wishTotal");
 
-function saveWishlist() {
-    localStorage.setItem("wishlist", JSON.stringify(wishlist));
+function saveWishlist() { localStorage.setItem("wishlist", JSON.stringify(wishlist)); }
+
+function getImg(product) {
+    if (product.images && product.images[0]) {
+        const clean = product.images[0].replace(/[\[\]\"]/g, "");
+        if (clean.startsWith("http") && !clean.includes("imgur.com")) return clean;
+    }
+    return `https://picsum.photos/600/400?random=${product.id}`;
 }
 
-function getTotalPrice() {
-    return wishlist.reduce((sum, item) => sum + item.price * item.quantity, 0);
+function updateTotal() {
+    const total = wishlist.reduce((s, i) => s + i.price * i.quantity, 0);
+    wishTotalEl.textContent = `$${total}`;
+    totalBar.style.display = wishlist.length ? "flex" : "none";
 }
 
-function renderTotal() {
-    let totalEl = document.getElementById("wishlistTotal");
-    if (!totalEl) {
-        totalEl = document.createElement("div");
-        totalEl.id = "wishlistTotal";
-        totalEl.className = "text-right mt-8 text-xl font-bold text-gray-800";
-        wishlistContainer.parentElement.appendChild(totalEl);
-    }
-    if (wishlist.length === 0) {
-        totalEl.textContent = "";
-    } else {
-        totalEl.textContent = `Total Price: $${getTotalPrice()}`;
-    }
+function updateCardQty(id) {
+    const item = wishlist.find(i => i.id === id);
+    if (!item) { renderWishlist(); return; }
+    const countEl = document.getElementById(`qty-count-${id}`);
+    const subtotalEl = document.getElementById(`subtotal-${id}`);
+    if (countEl) countEl.textContent = item.quantity;
+    if (subtotalEl) subtotalEl.textContent = `Subtotal: $${item.price * item.quantity}`;
+    updateTotal();
+}
+
+function increase(id) {
+    const item = wishlist.find(i => i.id === id);
+    if (item) { item.quantity++; saveWishlist(); updateCardQty(id); }
+}
+
+function decrease(id) {
+    const idx = wishlist.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    wishlist[idx].quantity--;
+    if (wishlist[idx].quantity <= 0) { wishlist.splice(idx, 1); saveWishlist(); renderWishlist(); return; }
+    saveWishlist();
+    updateCardQty(id);
+}
+
+function removeItem(id) {
+    wishlist = wishlist.filter(i => i.id !== id);
+    saveWishlist();
+    renderWishlist();
 }
 
 function renderWishlist() {
-    if (!wishlistContainer) return;
-    wishlistContainer.innerHTML = "";
-
+    grid.innerHTML = "";
     if (wishlist.length === 0) {
-        wishlistContainer.innerHTML = `
-            <div class="col-span-full text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm">
-                <p class="text-xl font-semibold text-gray-500 mb-4">Yoqtirgan mahsulotlaringiz hozircha yo'q ❤️</p>
-                <a href="index.html" class="inline-block bg-blue-600 text-white px-6 py-2.5 rounded-xl hover:bg-blue-700 transition">
-                    Asosiy sahifaga qaytish
-                </a>
-            </div>
-        `;
-        renderTotal();
+        totalBar.style.display = "none";
+        grid.innerHTML = `
+            <div class="empty" style="grid-column:1/-1">
+                <div class="empty-icon">❤️</div>
+                <div class="empty-title">Your wishlist is empty</div>
+                <p>Save products you love and find them here.</p>
+                <a href="../index.html">Browse Products</a>
+            </div>`;
         return;
     }
 
-    wishlist.forEach((product, index) => {
-        let productImg = "https://picsum.photos/600/400";
-        if (product.images && product.images[0]) {
-            let cleanImg = product.images[0].replace(/[\[\]\"]/g, "");
-            if (cleanImg.startsWith("http") && !cleanImg.includes("imgur.com")) {
-                productImg = cleanImg;
-            } else {
-                productImg = `https://picsum.photos/600/400?random=${product.id}`;
-            }
-        }
-
-        const subtotal = product.price * product.quantity;
-
+    wishlist.forEach((p, i) => {
+        const img = getImg(p);
         const card = document.createElement("div");
-        card.className = "bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition flex flex-col justify-between";
+        card.className = "card";
+        card.style.animationDelay = `${i * 0.05}s`;
         card.innerHTML = `
-            <div>
-                <div class="w-full bg-gray-50 rounded-xl overflow-hidden mb-4">
-                    <img class="w-full h-[220px] object-cover rounded-xl" src="${productImg}" alt="${product.title}" onerror="this.src='https://picsum.photos/600/400?random=${product.id}'" />
-                </div>
-                <h3 class="text-base font-bold text-gray-800 line-clamp-1">${product.title}</h3>
-                <p class="text-sm font-semibold text-blue-600 mt-1">Price: $${product.price}</p>
+            <div class="card-img-wrap">
+                <img src="${img}" alt="${p.title}" onerror="this.src='https://picsum.photos/600/400?random=${p.id}'"/>
             </div>
-            <div class="mt-3">
-               
-               
-                <button onclick="removeItemFromWishlist(${index})" class="w-full py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold text-sm rounded-xl transition cursor-pointer">
+            <div class="card-body">
+                <div class="card-category">${p.category?.name || "Product"}</div>
+                <div class="card-title">${p.title}</div>
+                <div class="card-price">$${p.price}</div>
+                <div class="qty-control">
+                    <button class="qty-btn minus" onclick="decrease(${p.id})">−</button>
+                    <span class="qty-count" id="qty-count-${p.id}">${p.quantity}</span>
+                    <button class="qty-btn plus" onclick="increase(${p.id})">+</button>
+                </div>
+                <div class="card-subtotal" id="subtotal-${p.id}">Subtotal: $${p.price * p.quantity}</div>
+                <button class="remove-btn" onclick="removeItem(${p.id})">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                     Remove from Wishlist
                 </button>
             </div>
         `;
-        wishlistContainer.appendChild(card);
+        grid.appendChild(card);
     });
 
-    renderTotal();
-}
-
-
-
-function removeItemFromWishlist(index) {
-    wishlist.splice(index, 1);
-    saveWishlist();
-    renderWishlist();
+    updateTotal();
 }
 
 renderWishlist();
